@@ -114,33 +114,76 @@ if [ "$(stat -c %u "$DATA")" != "$MSSQL_UID" ] || [ -n "$(find "$DATA" -maxdepth
 fi
 install -d -o mssql -g "$(id -g mssql)" -m 0750 "$DATA/railway-backup"
 
-# Startup trace flags live in mssql.conf ([traceflag] section, managed here).
-# 1800 makes SQL Server write its log in 4 KB-aligned blocks; Railway volumes
-# otherwise trigger "misaligned log IOs" fallbacks during setup.
+# mssql.conf sections managed here (rewritten every boot):
+#   [traceflag] startup trace flags. 1800 makes SQL Server write its log in 4 KB-aligned
+#               blocks; Railway volumes otherwise trigger "misaligned log IOs" fallbacks.
+#   [coredump]  mini dumps only: a full dump of a crashed sqlservr is as large as its
+#               memory and filled a 5 GB volume during testing.
 FLAGS="${MSSQL_TRACE_FLAGS-1800}"
 if ! [[ "$FLAGS" =~ ^([0-9]{1,5}(,[0-9]{1,5})*)?$ ]]; then
   log "WARNING: MSSQL_TRACE_FLAGS='${FLAGS}' is not a comma-separated list of numbers; using 1800"
   FLAGS=1800
 fi
-python3 - "$DATA/mssql.conf" "$FLAGS" <<'PY'
+if python3 - "$DATA/mssql.conf" "$FLAGS" <<'PY'
 import configparser, os, sys
 path, flags = sys.argv[1], [f for f in sys.argv[2].split(",") if f]
 conf = configparser.ConfigParser()
 conf.optionxform = str
 conf.read(path)
-if conf.has_section("traceflag"):
-    conf.remove_section("traceflag")
+for section in ("traceflag", "coredump"):
+    if conf.has_section(section):
+        conf.remove_section(section)
 if flags:
     conf.add_section("traceflag")
     for i, flag in enumerate(flags):
         conf.set("traceflag", f"traceflag{i}", flag)
+conf.add_section("coredump")
+conf.set("coredump", "captureminiandfull", "false")
+conf.set("coredump", "coredumptype", "mini")
 with open(path + ".tmp", "w") as handle:
     conf.write(handle)
 os.replace(path + ".tmp", path)
 PY
-chown mssql:"$(id -g mssql)" "$DATA/mssql.conf"
-log "startup trace flags: ${FLAGS:-none}"
+then
+  chown mssql:"$(id -g mssql)" "$DATA/mssql.conf"
+  log "startup trace flags: ${FLAGS:-none}; crash dumps: mini only"
+else
+  rm -f "$DATA/mssql.conf.tmp"
+  log "WARNING: could not update ${DATA}/mssql.conf (volume full?)"
+fi
+# Keep only the newest crash dump folder/file; old ones only use volume space.
+ls -1dt "$DATA"/log/core.* 2>/dev/null | tail -n +2 | xargs -r rm -rf
+USED=$(df -P "$DATA" 2>/dev/null | awk 'NR == 2 { print $5 }')
+log "volume ${DATA}: ${USED:-?} used"
 find "$DATA/railway-backup" -type f -name '*.bak' -mmin +60 -delete 2>/dev/null || true
+
+# Storage facts for the log: SQL Server opens its files with O_DIRECT.
+python3 - "$DATA" <<'PY' || true
+import mmap, os, sys
+path = os.path.join(sys.argv[1], ".railway-odirect-test")
+info = os.statvfs(sys.argv[1])
+try:
+    fd = os.open(path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC | os.O_DIRECT, 0o600)
+    buf = mmap.mmap(-1, 4096)
+    buf.write(b"x" * 4096)
+    os.write(fd, buf)
+    os.close(fd)
+    result = "O_DIRECT 4 KB write ok"
+except OSError as err:
+    result = f"O_DIRECT write failed: {err}"
+finally:
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+fs = "?"
+with open("/proc/mounts") as mounts:
+    for line in mounts:
+        parts = line.split()
+        if parts[1] == sys.argv[1]:
+            fs = parts[2]
+print(f"railway-mssql: volume filesystem {fs}, block size {info.f_bsize}, {result}")
+PY
 
 as_mssql python3 "$HELPER" &
 
