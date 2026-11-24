@@ -113,6 +113,33 @@ if [ "$(stat -c %u "$DATA")" != "$MSSQL_UID" ] || [ -n "$(find "$DATA" -maxdepth
   chown -R mssql:"$(id -g mssql)" "$DATA"
 fi
 install -d -o mssql -g "$(id -g mssql)" -m 0750 "$DATA/railway-backup"
+
+# Startup trace flags live in mssql.conf ([traceflag] section, managed here).
+# 1800 makes SQL Server write its log in 4 KB-aligned blocks; Railway volumes
+# otherwise trigger "misaligned log IOs" fallbacks during setup.
+FLAGS="${MSSQL_TRACE_FLAGS-1800}"
+if ! [[ "$FLAGS" =~ ^([0-9]{1,5}(,[0-9]{1,5})*)?$ ]]; then
+  log "WARNING: MSSQL_TRACE_FLAGS='${FLAGS}' is not a comma-separated list of numbers; using 1800"
+  FLAGS=1800
+fi
+python3 - "$DATA/mssql.conf" "$FLAGS" <<'PY'
+import configparser, os, sys
+path, flags = sys.argv[1], [f for f in sys.argv[2].split(",") if f]
+conf = configparser.ConfigParser()
+conf.optionxform = str
+conf.read(path)
+if conf.has_section("traceflag"):
+    conf.remove_section("traceflag")
+if flags:
+    conf.add_section("traceflag")
+    for i, flag in enumerate(flags):
+        conf.set("traceflag", f"traceflag{i}", flag)
+with open(path + ".tmp", "w") as handle:
+    conf.write(handle)
+os.replace(path + ".tmp", path)
+PY
+chown mssql:"$(id -g mssql)" "$DATA/mssql.conf"
+log "startup trace flags: ${FLAGS:-none}"
 find "$DATA/railway-backup" -type f -name '*.bak' -mmin +60 -delete 2>/dev/null || true
 
 as_mssql python3 "$HELPER" &

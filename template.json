@@ -82,6 +82,11 @@
           "description": "Memory SQL Server may use, in MB (minimum 2048). Empty = 80% of the service limit. Express uses at most 1,410 MB for its buffer pool anyway.",
           "required": false
         },
+        "MSSQL_TRACE_FLAGS": {
+          "defaultValue": "1800",
+          "description": "Startup trace flags, comma-separated. 1800 = 4 KB-aligned log writes, needed on Railway volumes. Empty = none.",
+          "required": false
+        },
         "MSSQL_BACKUP_TOKEN": {
           "defaultValue": "${{secret(48, \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\")}}",
           "description": "Bearer token for the private backup/restore endpoint on PORT, generated at deploy. The SQL Server Backup job references it.",
