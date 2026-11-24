@@ -63,10 +63,10 @@ Cron `45 3 * * *`, restart NEVER. Commands: `backup` (default), `list`, `restore
 
 | Service | Idle RAM | Typical | Notes |
 |---|---|---|---|
-| SQL Server | see `_reports/round13/181-mssql-server.md` (measured) | 1–2 GB (Express buffer pool max 1,410 MB) | needs a ≥2 GB memory limit → Hobby or Pro |
+| SQL Server | 1.1 GB (measured, Express, after a backup/restore) | 1–2 GB (Express buffer pool max 1,410 MB) | needs a ≥2 GB memory limit → Hobby or Pro |
 | SQL Server Backup | 0 (runs seconds to minutes per day) | | |
 
-Minimum plan: **Hobby**. Estimated $8–20/month for a small Express database at Railway prices (RAM $10/GB-month).
+Minimum plan: **Hobby**. Estimated $12–25/month for a small Express database at Railway prices (RAM $10/GB-month).
 
 ## Verification checklist
 
@@ -74,7 +74,8 @@ Minimum plan: **Hobby**. Estimated $8–20/month for a small Express database at
 - [x] `sa` login via TCP proxy: 17.0.5065.9 Express Edition; trace flags 1800 active.
 - [x] App login created a table and inserted Unicode rows; `CREATE DATABASE` denied to it (least privilege).
 - [x] Backup cron run: railway.bak.zst uploaded, sha256 + VERIFYONLY + zstd test, MANIFEST, retention.
-- [x] Restore run into `railway_restored`.
+- [x] Restore run into `railway_restored` (2 rows, MULTI_USER).
+- [x] `ACCEPT_EULA=no`: deploy SUCCESS, SQL Server held back, log explains. 1 GB memory limit (Trial-sized): deploy SUCCESS, held back with the plan hint. Redeploy on the existing volume: data kept, app login works.
 
 ## Open questions
 
