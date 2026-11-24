@@ -1,5 +1,7 @@
 # Deploy and Host Microsoft SQL Server with Railway
 
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/microsoft-sql-server-2025-with-backups?referralCode=20H68q)
+
 Microsoft SQL Server is the relational database behind countless .NET, Java and enterprise applications. This community template runs SQL Server 2025 on Linux from Microsoft's official container image, with the free Express edition by default, an app database and login created for you, TCP access for SSMS and other tools, and daily backups to a Railway Bucket.
 
 ## About Hosting Microsoft SQL Server
