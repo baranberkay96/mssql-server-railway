@@ -27,7 +27,7 @@ as_mssql() { setpriv --reuid=mssql --regid="$(id -g mssql)" --init-groups -- env
 # Keep the container up with a passing healthcheck, but without SQL Server.
 hold() {
   log "SQL Server is NOT started: $1"
-  log "Change the variable named above on the SQL Server service and redeploy."
+  log "Fix the cause above (service variable or plan) and redeploy."
   set_state "hold: $1"
   exec setpriv --reuid=mssql --regid="$(id -g mssql)" --init-groups -- python3 "$HELPER"
 }
